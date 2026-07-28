@@ -43,16 +43,20 @@ Projects are loaded from two config files and merged (duplicates ignored). Eithe
 | `/etc/codebuild-watcher.conf` | System-wide projects (all users) |
 | `$HOME/.config/codebuild-watcher.conf` | Per-user projects |
 
-Each file is plain text — one CodeBuild project name per line. Blank lines and lines starting with `#` are ignored.
+Each file is plain text — one entry per line. Blank lines and lines starting with `#` are ignored.
+
+Entries can optionally include an AWS region prefix. If omitted, `us-east-1` is assumed.
 
 ```
-# my-codebuild-watcher.conf
+# codebuild-watcher.conf
 
+# plain name — defaults to us-east-1
 my-backend-project
 my-frontend-project
 
-# staging
-my-staging-project
+# explicit region
+us-west-2:my-west-coast-project
+eu-west-1:my-european-project
 ```
 
 ## AWS credentials
@@ -87,9 +91,9 @@ Example output:
 ```
 Watching 3 project(s) from [/etc/codebuild-watcher.conf, /home/alice/.config/codebuild-watcher.conf] — Ctrl-C to exit
 
-[my-backend-project] IN_PROGRESS (started: 2024-03-15 09:01:22)
-[my-backend-project] SUCCEEDED (ended: 2024-03-15 09:04:51)
-[my-frontend-project] FAILED (ended: 2024-03-15 09:05:10)
+[us-east-1/my-backend-project] IN_PROGRESS (started: 2024-03-15 09:01:22)
+[us-east-1/my-backend-project] SUCCEEDED (ended: 2024-03-15 09:04:51)
+[us-west-2/my-west-coast-project] FAILED (ended: 2024-03-15 09:05:10)
 ```
 
 ## Releasing

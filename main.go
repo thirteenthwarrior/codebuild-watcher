@@ -28,8 +28,8 @@ import (
 )
 
 const (
-	awsRegion    = "us-east-1"
-	pollInterval = 10 * time.Second
+	defaultRegion = "us-east-1"
+	pollInterval  = 10 * time.Second
 )
 
 var confFiles = []string{
@@ -45,9 +45,24 @@ const (
 	reset  = "\033[0m"
 )
 
-// loadProjectsFromFile reads project names from a single file.
+// project pairs a CodeBuild project name with its AWS region.
+type project struct {
+	region string
+	name   string
+}
+
+// parseProjectLine parses a config line into a project.
+// Accepts "region:name" or plain "name" (defaults to us-east-1).
+func parseProjectLine(line string) project {
+	if i := strings.IndexByte(line, ':'); i > 0 {
+		return project{region: line[:i], name: line[i+1:]}
+	}
+	return project{region: defaultRegion, name: line}
+}
+
+// loadProjectsFromFile reads projects from a single file.
 // Returns nil, nil if the file does not exist.
-func loadProjectsFromFile(path string) ([]string, error) {
+func loadProjectsFromFile(path string) ([]project, error) {
 	f, err := os.Open(path)
 	if os.IsNotExist(err) {
 		return nil, nil
@@ -57,31 +72,33 @@ func loadProjectsFromFile(path string) ([]string, error) {
 	}
 	defer f.Close()
 
-	var projects []string
+	var projects []project
 	scanner := bufio.NewScanner(f)
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
 		}
-		projects = append(projects, line)
+		projects = append(projects, parseProjectLine(line))
 	}
 	return projects, scanner.Err()
 }
 
-// loadProjects merges project names from all conf files, deduplicating.
+// loadProjects merges projects from all conf files, deduplicating by region+name.
 // Silently skips files that do not exist. Errors if no projects are found.
-func loadProjects(paths []string) ([]string, error) {
-	seen := make(map[string]bool)
-	var projects []string
+func loadProjects(paths []string) ([]project, error) {
+	type key struct{ region, name string }
+	seen := make(map[key]bool)
+	var projects []project
 	for _, path := range paths {
 		entries, err := loadProjectsFromFile(path)
 		if err != nil {
 			return nil, err
 		}
 		for _, p := range entries {
-			if !seen[p] {
-				seen[p] = true
+			k := key{p.region, p.name}
+			if !seen[k] {
+				seen[k] = true
 				projects = append(projects, p)
 			}
 		}
@@ -161,15 +178,23 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	cfg, err := config.LoadDefaultConfig(ctx, config.WithRegion(awsRegion))
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "error loading AWS config:", err)
-		os.Exit(1)
+	// Build one CodeBuild client per region.
+	clients := make(map[string]*codebuild.Client)
+	for _, p := range projects {
+		if _, ok := clients[p.region]; ok {
+			continue
+		}
+		cfg, err := config.LoadDefaultConfig(ctx, config.WithRegion(p.region))
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error loading AWS config for region %s: %v\n", p.region, err)
+			os.Exit(1)
+		}
+		clients[p.region] = codebuild.NewFromConfig(cfg)
 	}
-	cb := codebuild.NewFromConfig(cfg)
 
-	lastBuild := make(map[string]string)
-	lastStatus := make(map[string]types.StatusType)
+	type stateKey struct{ region, name string }
+	lastBuild := make(map[stateKey]string)
+	lastStatus := make(map[stateKey]types.StatusType)
 
 	fmt.Printf("Watching %d project(s) from [%s] — Ctrl-C to exit\n\n", len(projects), strings.Join(confFiles, ", "))
 
@@ -178,10 +203,10 @@ func main() {
 
 	// Poll immediately on startup, then on each tick.
 	poll := func() {
-		for _, project := range projects {
-			info, err := getLatestBuild(ctx, cb, project)
+		for _, p := range projects {
+			info, err := getLatestBuild(ctx, clients[p.region], p.name)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "error reading %s: %v\n", project, err)
+				fmt.Fprintf(os.Stderr, "error reading %s/%s: %v\n", p.region, p.name, err)
 				continue
 			}
 			if info == nil {
@@ -201,10 +226,11 @@ func main() {
 				label = "ended"
 			}
 
-			if lastBuild[project] != info.id || lastStatus[project] != info.status {
-				lastBuild[project] = info.id
-				lastStatus[project] = info.status
-				fmt.Printf("[%s] %s (%s: %s)\n", project, colorize(info.status), label, ts)
+			k := stateKey{p.region, p.name}
+			if lastBuild[k] != info.id || lastStatus[k] != info.status {
+				lastBuild[k] = info.id
+				lastStatus[k] = info.status
+				fmt.Printf("[%s/%s] %s (%s: %s)\n", p.region, p.name, colorize(info.status), label, ts)
 			}
 		}
 	}
