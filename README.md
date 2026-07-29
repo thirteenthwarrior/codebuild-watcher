@@ -91,9 +91,9 @@ Example output:
 ```
 Watching 3 project(s) from [/etc/codebuild-watcher.conf, /home/alice/.config/codebuild-watcher.conf] — Ctrl-C to exit
 
-[us-east-1/my-backend-project] IN_PROGRESS (started: 2024-03-15 09:01:22)
-[us-east-1/my-backend-project] SUCCEEDED (ended: 2024-03-15 09:04:51)
-[us-west-2/my-west-coast-project] FAILED (ended: 2024-03-15 09:05:10)
+[us-east-1/my-backend-project] IN_PROGRESS (started: 2024-03-15 09:01:22 EST)
+[us-east-1/my-backend-project] SUCCEEDED (ended: 2024-03-15 09:04:51 EST)
+[us-west-2/my-west-coast-project] FAILED (ended: 2024-03-15 09:05:10 PST)
 ```
 
 ## Releasing

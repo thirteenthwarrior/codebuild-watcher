@@ -145,7 +145,7 @@ func prettyTime(t *time.Time) string {
 	if t == nil {
 		return "unknown"
 	}
-	return t.Format("2006-01-02 15:04:05")
+	return t.In(time.Local).Format("2006-01-02 15:04:05 MST")
 }
 
 func colorize(status types.StatusType) string {
@@ -179,7 +179,7 @@ Configuration:
     us-west-2:my-project
 
 Output:
-  [region/project] STATUS (started|ended: YYYY-MM-DD HH:MM:SS)
+  [region/project] STATUS (started|ended: YYYY-MM-DD HH:MM:SS TZ)
 
 Options:
 `, pollInterval)
