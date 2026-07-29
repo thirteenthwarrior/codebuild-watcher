@@ -1,19 +1,10 @@
-// codebuild-watcher — poll CodeBuild project status and print on change.
-//
-// Projects are merged from /etc/codebuild-watcher.conf and
-// $HOME/.config/codebuild-watcher.conf (one project name per line;
-// blank lines and lines starting with # are ignored; missing files are skipped).
-//
-// Usage:
-//
-//	codebuild-watcher          # poll all projects from conf file
-//
-// Press Ctrl-C to exit.
+// codebuild-watcher polls AWS CodeBuild project status and prints on change.
 package main
 
 import (
 	"bufio"
 	"context"
+	"flag"
 	"fmt"
 	"os"
 	"os/signal"
@@ -26,6 +17,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/codebuild"
 	"github.com/aws/aws-sdk-go-v2/service/codebuild/types"
 )
+
+var version = "dev"
 
 const (
 	defaultRegion = "us-east-1"
@@ -169,6 +162,37 @@ func colorize(status types.StatusType) string {
 }
 
 func main() {
+	flag.Usage = func() {
+		fmt.Fprintf(os.Stderr, `Usage: codebuild-watcher [options]
+
+Polls AWS CodeBuild project status and prints a line whenever a build
+starts, finishes, or changes state. Polls every %s.
+
+Configuration:
+  Projects are merged from the following files (missing files are skipped):
+    /etc/codebuild-watcher.conf
+    $HOME/.config/codebuild-watcher.conf
+
+  One entry per line. Blank lines and lines starting with # are ignored.
+  Entries may optionally include an AWS region prefix:
+    my-project              (defaults to us-east-1)
+    us-west-2:my-project
+
+Output:
+  [region/project] STATUS (started|ended: YYYY-MM-DD HH:MM:SS)
+
+Options:
+`, pollInterval)
+		flag.PrintDefaults()
+	}
+
+	showVersion := flag.Bool("version", false, "print version and exit")
+	flag.Parse()
+
+	if *showVersion {
+		fmt.Printf("codebuild-watcher %s\n", version)
+		os.Exit(0)
+	}
 	projects, err := loadProjects(confFiles)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
