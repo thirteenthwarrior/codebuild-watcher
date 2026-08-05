@@ -74,7 +74,8 @@ The IAM principal needs the following permissions:
   "Effect": "Allow",
   "Action": [
     "codebuild:ListBuildsForProject",
-    "codebuild:BatchGetBuilds"
+    "codebuild:BatchGetBuilds",
+    "logs:GetLogEvents"
   ],
   "Resource": "*"
 }
